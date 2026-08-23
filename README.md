@@ -1,11 +1,13 @@
 # Sözleşme Analiz Asistanı
 
-Sözleşmelerinizi yükleyin; içeriğini özetleyelim, dikkat etmeniz gereken maddeleri
-işaretleyelim, aklınıza takılan soruları yanıtlayalım ve isterseniz birden fazla
-sözleşmeyi karşılaştıralım.
+**RAG (Retrieval-Augmented Generation) tabanlı**, tamamen yerel çalışan bir
+sözleşme inceleme asistanı. Sözleşmelerinizi yükleyin; içeriğini özetleyelim,
+dikkat etmeniz gereken maddeleri işaretleyelim, aklınıza takılan soruları
+kaynak göstererek yanıtlayalım ve isterseniz birden fazla sözleşmeyi
+karşılaştıralım.
 
-Tamamen yerel çalışır: hiçbir belge internete ya da üçüncü bir servise
-gönderilmez, her şey kendi bilgisayarınızda kalır.
+Hiçbir belge internete ya da üçüncü bir servise gönderilmez, her şey kendi
+bilgisayarınızda kalır.
 
 > **Not:** Bu araç sözleşme inceleme sürecini desteklemek için geliştirilmiştir.
 > Ürettiği analiz ve yanıtlar profesyonel hukuki danışmanlığın yerini tutmaz.
@@ -20,11 +22,34 @@ gönderilmez, her şey kendi bilgisayarınızda kalır.
   standart maddeler taranır; bulgular önem derecesine göre (kritik / yüksek /
   orta / düşük) işaretlenir. Kontrol listesi sözleşmenin türüne göre uyarlanır
   (örn. bir boşanma protokolünde ticari sözleşmelere özgü konular aranmaz).
-- **Kaynaklı sohbet** — sözleşmeyle ilgili sorularınıza, hangi maddeye
-  dayandığını gösteren yanıtlar alırsınız.
+- **Kaynaklı sohbet (RAG)** — sözleşmeyle ilgili sorularınız önce ilgili
+  maddeleri bulan bir arama katmanından geçer, yanıt yalnızca bu maddelere
+  dayanarak üretilir ve hangi maddeye dayandığı gösterilir.
 - **Karşılaştırma** — 2-5 sözleşmeyi seçip ortak konularda (fesih, sorumluluk,
-  ödeme vb.) yan yana karşılaştırabilirsiniz.
+  ödeme vb.) yan yana karşılaştırabilirsiniz; bu da aynı RAG katmanını kullanır.
 - **Nasıl Çalışır sayfası** — uygulama içi kullanım kılavuzu ve SSS.
+
+## RAG mimarisi
+
+Sohbet ve karşılaştırma özellikleri klasik bir **retrieve-then-generate**
+akışı izler: önce sözleşme maddeleri arasından soruyla en alakalı olanlar
+bulunur, sonra bu maddeler dil modeline bağlam olarak verilir ve yanıt
+yalnızca bu maddelere dayanarak üretilip kaynak gösterilir (`app/rag/`,
+`app/services/qa.py`, `app/services/compare.py`).
+
+Geri getirme (retrieval) katmanı üç bağımsız sinyali birleştiren bir hibrit
+arama motorudur (**Reciprocal Rank Fusion**, `app/rag/retriever.py`):
+
+1. **BM25** — Türkçe kök yaklaşımıyla sözcüksel/anahtar kelime eşleşmesi.
+2. **Karakter n-gram TF-IDF** — Türkçe çekim/ek varyantlarına dayanıklı
+   (örn. "fesihte" ↔ "feshin").
+3. **Dense (anlamsal) vektör arama** — opsiyonel, `sentence-transformers`
+   çok dilli embedding modeliyle; hiçbir anahtar kelime paylaşmayan ama
+   anlamca yakın sorularda da doğru maddeyi bulur.
+
+Risk analizi ise farklı bir katmandır ve retrieval kullanmaz: deterministik
+bir kural motoru (regex tabanlı) sözleşmenin tüm maddelerini tarar, bir dil
+modeli bunun üzerine bağlamsal yorum ekler (`app/services/risk.py`).
 
 ## Teknoloji
 
@@ -33,7 +58,7 @@ gönderilmez, her şey kendi bilgisayarınızda kalır.
 | Frontend | Next.js (App Router), TypeScript, Tailwind CSS |
 | Backend | FastAPI (Python), SQLite |
 | Dil modeli | [Ollama](https://ollama.com) — tamamen yerel, ücretsiz, API anahtarı gerekmez |
-| Arama | Anahtar kelime + anlamsal arama birleşimi (opsiyonel `sentence-transformers`) |
+| RAG / arama | BM25 + karakter n-gram TF-IDF + dense embedding (`sentence-transformers`), RRF ile birleştirme |
 
 ## Kurulum
 
@@ -82,7 +107,7 @@ backend/
   app/
     ingest/      # Dosya ayrıştırma ve maddelere bölme
     llm/         # Ollama istemcisi ve promptlar
-    rag/         # Arama motoru (anahtar kelime + anlamsal)
+    rag/         # RAG geri getirme (retrieval) motoru — BM25 + n-gram + dense
     routers/     # API uç noktaları
     services/    # Risk analizi, soru-cevap, karşılaştırma mantığı
 frontend/
