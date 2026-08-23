@@ -1,0 +1,179 @@
+@import "tailwindcss";
+
+:root {
+  /* "Adalet" paleti — koyu lacivert zemin üzerine zümrüt yeşili (onaylı/güvenli)
+     ve metalik altın (önemli aksiyon/vurgu) vurguları. Tüm ekranlarda sabit —
+     sistem açık/koyu temasından etkilenmez. */
+  --paper: #0f1c2e;
+  --paper-2: #0a1524; /* zeminin alt tonu — yumuşak üstten-alta geçiş için */
+  --surface: #16263c; /* kartlar zeminden daha açık — yükselti bu kontrastla okunur */
+
+  /* Nötr metin skalası — koyu zemin üzerinde okunaklı açık gri-lacivert tonlar. */
+  --ink: #edf1f8;
+  --ink-2: #a7b3c6;
+  --ink-3: #76839c;
+  --border: #2a3f5c;
+
+  /* Birincil — Lacivert / Gece Mavisi: güven, ciddiyet, otorite. Menü + ana butonlar. */
+  --navy-deep: #0a1628; /* en koyu — header gradyanının alt ucu */
+  --navy-1: #1a2f4e; /* header gradyanının üst ucu */
+  --accent: #3b6ea5;
+  --accent-hover: #4c80b8;
+  --accent-soft: rgba(59, 110, 165, 0.16);
+  --accent-ink: #eef1f7; /* lacivert header zemini üzerindeki metin */
+  --accent-ink-muted: rgba(238, 241, 247, 0.66);
+  --accent-tint: rgba(238, 241, 247, 0.12); /* header üzerinde hover/aktif */
+
+  /* İkincil — Zümrüt Yeşili: onaylanan, güvenli, başarı durumları. */
+  --secondary: #10b981;
+  --secondary-bright: #10b981;
+  --secondary-hover: #34d399;
+  --secondary-soft: rgba(16, 185, 129, 0.16);
+
+  /* Üçüncül — Metalik Altın: önemli aksiyonlar, logo detayı, aktif sekme. */
+  --gold: #c9a227;
+  --gold-hover: #ddbb4f;
+  --gold-soft: rgba(201, 162, 39, 0.18);
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+
+  /* Durum (risk) paleti — moddan bağımsız, sabit.
+     good=zümrüt, warning=altın, serious/critical=kırmızı ailesi (yüksek risk). */
+  --status-good: #10b981;
+  --status-warning: #c9a227;
+  --status-serious: #c14b5c;
+  --status-critical: #e5484d;
+  --status-muted: #8b96ab;
+  --status-good-bg: rgba(16, 185, 129, 0.16);
+  --status-warning-bg: rgba(201, 162, 39, 0.18);
+  --status-serious-bg: rgba(193, 75, 92, 0.16);
+  --status-critical-bg: rgba(229, 72, 77, 0.16);
+  --status-muted-bg: rgba(139, 150, 171, 0.14);
+
+  /* Belge durum etiketleri ("Analiz edildi" / "Analiz bekliyor") — sabit,
+     yüksek kontrastlı, açık zeminli pill renkleri (koyu kartların üzerinde
+     "etiket/sticker" gibi öne çıkar). */
+  --badge-success-bg: #d1fae5;
+  --badge-success-text: #065f46;
+  --badge-pending-bg: #fef3c7;
+  --badge-pending-text: #92400e;
+
+  --chart-track: var(--border);
+
+  /* Kart yükselti (elevation) — koyu zeminde gölge yerine esas olarak
+     surface/paper açıklık farkıyla, ince bir siyah gölge derinliği pekiştirir. */
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: 0 10px 34px rgba(0, 0, 0, 0.5);
+  --shadow-nav: 0 1px 0 rgba(16, 24, 45, 0.5), 0 12px 28px -16px rgba(9, 14, 26, 0.45);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-border: var(--border);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-ink-muted: var(--accent-ink-muted);
+  --color-accent-tint: var(--accent-tint);
+  --color-secondary: var(--secondary);
+  --color-secondary-bright: var(--secondary-bright);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-secondary-soft: var(--secondary-soft);
+  --color-gold: var(--gold);
+  --color-gold-hover: var(--gold-hover);
+  --color-gold-soft: var(--gold-soft);
+
+  --font-sans: var(--font-plex-sans);
+}
+
+* {
+  border-color: var(--border);
+}
+
+@layer components {
+  /* Ortak kart yüzeyi — bordürlü düz kutu yerine belirgin ama yumuşak gölge. */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Tıklanabilir/etkileşimli kartlar (sözleşme satırları vb.) — hover'da
+     gölge derinleşir ve kart hafifçe yukarı kalkar. */
+  .card-interactive {
+    transition:
+      box-shadow 0.18s ease,
+      transform 0.18s ease,
+      border-color 0.18s ease;
+  }
+  .card-interactive:hover {
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-2px);
+  }
+
+  /* Özet/mühür niteliğindeki kartlar (risk puanı vb.) için üstte ince altın
+     çizgi — resmi bir belgenin mühürlü/onaylı hissini verir. */
+  .card-sealed {
+    position: relative;
+  }
+  .card-sealed::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    border-radius: 0.75rem 0.75rem 0 0;
+    background: linear-gradient(90deg, var(--gold), var(--secondary) 130%);
+  }
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  /* Düz tek renk yerine katmanlı zemin: üstten alta yumuşak koyu lacivert
+     geçiş + köşelerde hafif lacivert/zümrüt/altın ışıma — doku/desen yok,
+     sade ama tek renk de değil. */
+  background-color: var(--background);
+  background-image:
+    radial-gradient(1100px 560px at 8% -10%, rgba(59, 110, 165, 0.16), transparent 60%),
+    radial-gradient(900px 480px at 106% -6%, rgba(16, 185, 129, 0.09), transparent 55%),
+    radial-gradient(800px 460px at 50% 118%, rgba(201, 162, 39, 0.07), transparent 60%),
+    linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+  background-attachment: scroll, scroll, scroll, fixed;
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

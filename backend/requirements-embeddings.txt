@@ -1,0 +1,9 @@
+# OPSİYONEL — Yoğun (dense) vektör gömme desteği.
+# Kurulmadığında sistem, saf-Python hibrit arama (BM25 + karakter n-gram TF-IDF)
+# ile sorunsuz çalışmaya devam eder. Kurulursa üçüncü bir sinyal olarak
+# çok dilli cümle gömmeleri devreye girer ve anlamsal eşleşme belirgin iyileşir.
+#
+#   pip install -r requirements-embeddings.txt
+#
+# Not: torch yaklaşık 2 GB indirir. İlk çalıştırmada model indirilir (~470 MB).
+sentence-transformers==3.3.1

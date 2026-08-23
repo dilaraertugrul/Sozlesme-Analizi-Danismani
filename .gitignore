@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Backend (Python)
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/.env
+!backend/.env.example
+
+# Kullanıcı verisi — yüklenen sözleşmeler ve veritabanı asla repoya girmemeli
+backend/data/
+
+# Frontend (Next.js)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env*
+!frontend/.env.example
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+npm-debug.log*
