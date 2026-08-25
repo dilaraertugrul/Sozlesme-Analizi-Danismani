@@ -1,10 +1,10 @@
 # Sözleşme Analiz Asistanı
 
-**RAG (Retrieval-Augmented Generation) tabanlı**, tamamen yerel çalışan bir
-sözleşme inceleme asistanı. Sözleşmelerinizi yükleyin; içeriğini özetleyelim,
-dikkat etmeniz gereken maddeleri işaretleyelim, aklınıza takılan soruları
-kaynak göstererek yanıtlayalım ve isterseniz birden fazla sözleşmeyi
-karşılaştıralım.
+**RAG (Retrieval-Augmented Generation) mimarisi üzerine kurulu**, tamamen
+yerel çalışan bir sözleşme inceleme asistanıdır. Yüklenen sözleşmelerin
+içeriğini özetler, dikkat edilmesi gereken maddeleri işaretler, sorulara
+ilgili maddelere dayanarak kaynak göstererek yanıt verir ve talep edildiğinde
+birden fazla sözleşmeyi karşılaştırır.
 
 Hiçbir belge internete ya da üçüncü bir servise gönderilmez, her şey kendi
 bilgisayarınızda kalır.
