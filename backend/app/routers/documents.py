@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from ..db import get_db
 from ..ingest.chunker import clause_label
@@ -29,8 +30,10 @@ async def upload_documents(files: list[UploadFile] = File(...)):
             continue
 
         try:
+            filename = upload.filename or path.name
+            prepared = await run_in_threadpool(ingest_service.prepare, path, filename)
             with get_db() as conn:
-                uploaded.append(ingest_service.ingest(conn, path, upload.filename or path.name))
+                uploaded.append(ingest_service.persist(conn, filename, prepared))
         except Exception as exc:
             path.unlink(missing_ok=True)
             failed.append({"filename": upload.filename, "error": str(exc)})

@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  compareDocuments,
   listDocuments,
+  streamCompare,
   type CompareResult,
+  type CompareTopic,
   type DocumentSummary,
 } from "@/lib/api";
 import DocumentPicker from "@/components/DocumentPicker";
@@ -18,12 +19,26 @@ export default function ComparePage() {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [result, setResult] = useState<CompareResult | null>(null);
+  const [totalTopics, setTotalTopics] = useState(0);
   const [comparing, setComparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     listDocuments().then(setDocuments);
   }, []);
+
+  useEffect(() => {
+    if (!comparing) {
+      setElapsed(0);
+      return;
+    }
+    const start = Date.now();
+    const timer = setInterval(() => setElapsed(Math.round((Date.now() - start) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [comparing]);
+
+  const elapsedLabel = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
 
   const toggle = useCallback((id: string) => {
     setSelectedIds((prev) =>
@@ -35,8 +50,26 @@ export default function ComparePage() {
     setComparing(true);
     setError(null);
     setResult(null);
+    setTotalTopics(0);
     try {
-      setResult(await compareDocuments(selectedIds));
+      await streamCompare(selectedIds, undefined, {
+        onMeta: (meta) => {
+          setTotalTopics(Object.keys(meta.topic_labels).length);
+          setResult({ ...meta, headline: "", topics: [], llm_error: null });
+        },
+        onTopic: (topic: CompareTopic) => {
+          setResult((prev) => (prev ? { ...prev, topics: [...prev.topics, topic] } : prev));
+        },
+        onTopicError: (topic, message) => {
+          setResult((prev) =>
+            prev ? { ...prev, llm_error: `"${topic}" analiz edilemedi: ${message}` } : prev,
+          );
+        },
+        onDone: (info) => {
+          setResult((prev) => (prev ? { ...prev, headline: info.headline } : prev));
+        },
+        onError: (message) => setError(message),
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Karşılaştırma başarısız oldu.");
     } finally {
@@ -45,11 +78,7 @@ export default function ComparePage() {
   }
 
   const unanalyzed = result?.documents.filter((d) => d.risk_score === null) ?? [];
-
-  // Küçük yerel modeller ara sıra "topic" alanına yanlışlıkla bir belge id'si
-  // yazıyor (beklenen konu adı yerine) — bu bozuk kartları göstermeyelim.
-  const docIds = new Set(result?.documents.map((d) => d.id) ?? []);
-  const validTopics = result?.topics.filter((t) => !docIds.has(t.topic)) ?? [];
+  const validTopics = result?.topics ?? [];
 
   return (
     <div className="flex flex-1 justify-center bg-paper">
@@ -78,9 +107,18 @@ export default function ComparePage() {
           className="mt-4 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-accent-hover hover:shadow-md disabled:opacity-40 disabled:shadow-none"
         >
           {comparing
-            ? "Karşılaştırılıyor..."
+            ? `Karşılaştırılıyor... (${elapsedLabel})`
             : `Karşılaştır${selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}`}
         </button>
+
+        {comparing && (
+          <p className="mt-2 flex items-center gap-2 text-xs text-ink-3">
+            <CompareSpinner />
+            {totalTopics > 0
+              ? `Konular tek tek karşılaştırılıyor: ${result?.topics.length ?? 0}/${totalTopics} tamamlandı.`
+              : "Sözleşmeler hazırlanıyor…"}
+          </p>
+        )}
 
         {error && (
           <p
@@ -131,5 +169,18 @@ export default function ComparePage() {
         )}
       </main>
     </div>
+  );
+}
+
+function CompareSpinner() {
+  return (
+    <svg className="h-3.5 w-3.5 animate-spin text-accent" viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+      />
+    </svg>
   );
 }

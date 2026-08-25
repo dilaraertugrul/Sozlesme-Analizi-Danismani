@@ -27,8 +27,21 @@ export default function DocumentRiskPage({
   const [analysis, setAnalysis] = useState<RiskAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const [notAnalyzed, setNotAnalyzed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!analyzing) {
+      setElapsed(0);
+      return;
+    }
+    const start = Date.now();
+    const timer = setInterval(() => setElapsed(Math.round((Date.now() - start) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [analyzing]);
+
+  const elapsedLabel = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -111,14 +124,25 @@ export default function DocumentRiskPage({
 
             {notAnalyzed && !analysis && (
               <div className="rounded-xl border border-dashed border-border px-6 py-10 text-center">
-                <p className="text-sm text-ink-2">Bu sözleşme için risk analizi henüz çalıştırılmadı.</p>
-                <button
-                  onClick={handleAnalyze}
-                  disabled={analyzing}
-                  className="mt-4 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-accent-hover hover:shadow-md disabled:opacity-50 disabled:shadow-none"
-                >
-                  {analyzing ? "Analiz ediliyor..." : "Risk analizi yap"}
-                </button>
+                {analyzing ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <AnalyzingSpinner />
+                    <p className="text-sm text-ink-2">Analiz ediliyor… ({elapsedLabel})</p>
+                    <p className="text-xs text-ink-3">
+                      Yerel model bu sözleşmeyi inceliyor, kalite için genellikle 1-2 dakika sürer.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-ink-2">Bu sözleşme için risk analizi henüz çalıştırılmadı.</p>
+                    <button
+                      onClick={handleAnalyze}
+                      className="mt-4 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-accent-hover hover:shadow-md"
+                    >
+                      Risk analizi yap
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
@@ -146,14 +170,22 @@ export default function DocumentRiskPage({
                     <h2 className="text-sm font-medium text-ink-3">
                       Bulgular ({analysis.findings.length})
                     </h2>
-                    <button
-                      onClick={handleAnalyze}
-                      disabled={analyzing}
-                      className="text-sm text-ink-3 hover:text-ink disabled:opacity-50"
-                    >
-                      {analyzing ? "Analiz ediliyor..." : "Yeniden analiz et"}
-                    </button>
+                    {analyzing ? (
+                      <span className="flex items-center gap-2 text-sm text-ink-3">
+                        <AnalyzingSpinner small />
+                        Analiz ediliyor… ({elapsedLabel})
+                      </span>
+                    ) : (
+                      <button onClick={handleAnalyze} className="text-sm text-ink-3 hover:text-ink">
+                        Yeniden analiz et
+                      </button>
+                    )}
                   </div>
+                  {analyzing && (
+                    <p className="mb-3 text-xs text-ink-3">
+                      Yerel model bu sözleşmeyi inceliyor, kalite için genellikle 1-2 dakika sürer.
+                    </p>
+                  )}
                   {analysis.findings.length === 0 ? (
                     <p className="text-sm text-ink-3">Herhangi bir risk bulgusu tespit edilmedi.</p>
                   ) : (
@@ -178,5 +210,19 @@ export default function DocumentRiskPage({
         )}
       </main>
     </div>
+  );
+}
+
+function AnalyzingSpinner({ small = false }: { small?: boolean }) {
+  const size = small ? "h-4 w-4" : "h-6 w-6";
+  return (
+    <svg className={`${size} animate-spin text-accent`} viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+      />
+    </svg>
   );
 }

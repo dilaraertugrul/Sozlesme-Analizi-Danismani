@@ -102,36 +102,56 @@ def _rule_matrix(conn: sqlite3.Connection, doc_ids: list[str]) -> list[dict[str,
     return matrix
 
 
-def _build_llm_input(
+def _build_topic_input(
     docs: list[sqlite3.Row],
-    topics: list[tuple[str, str, str]],
-    collected: dict[str, dict[str, list[Any]]],
+    label: str,
+    per_doc: dict[str, list[Any]],
 ) -> str:
-    lines = ["KARŞILAŞTIRILAN SÖZLEŞMELER:"]
+    """Tek bir konu için girdi metni; bkz. `compare()`'daki paralel çağrı notu."""
+    lines = [f"KONU: {label}", "", "KARŞILAŞTIRILAN SÖZLEŞMELER:"]
     for doc in docs:
         lines.append(f"- {doc['id']}: {doc['title']} ({doc['doc_type'] or 'tür belirsiz'})")
 
-    for key, label, _ in topics:
-        lines.append(f"\n\n## KONU: {label}  (topic anahtarı: {key})")
-        for doc in docs:
-            chunks = collected[key].get(doc["id"], [])
-            lines.append(f"\n### {doc['id']} — {doc['title']}")
-            if not chunks:
-                lines.append("(bu konuda ilgili madde bulunamadı)")
-                continue
-            for chunk in chunks:
-                body = chunk.text[:MAX_CLAUSE_CHARS].replace("\n", " ")
-                lines.append(f"- {chunk.label}: {body}")
+    for doc in docs:
+        chunks = per_doc.get(doc["id"], [])
+        lines.append(f"\n### {doc['id']} — {doc['title']}")
+        if not chunks:
+            lines.append("(bu konuda ilgili madde bulunamadı)")
+            continue
+        for chunk in chunks:
+            body = chunk.text[:MAX_CLAUSE_CHARS].replace("\n", " ")
+            lines.append(f"- {chunk.label}: {body}")
     return "\n".join(lines)
 
 
-def compare(
-    conn: sqlite3.Connection,
-    doc_ids: list[str],
-    *,
-    topic_keys: list[str] | None = None,
-    use_llm: bool = True,
-) -> dict[str, Any]:
+# Tek konu girdisi çok daha küçük olduğu için (tüm 10 konu yerine), geniş
+# genel context yerine dar bir pencere yeterli — hem daha az bellek ayırır
+# hem de eşzamanlı konu çağrılarının birbirini boğmasını azaltır.
+TOPIC_NUM_CTX = 4096
+
+
+def _compare_topic(
+    docs: list[sqlite3.Row], key: str, label: str, per_doc: dict[str, list[Any]]
+) -> dict[str, Any] | None:
+    if not any(per_doc.get(doc["id"]) for doc in docs):
+        return None
+    payload = llm.complete_json(
+        system=prompts.COMPARE_TOPIC_SYSTEM,
+        messages=[{"role": "user", "content": _build_topic_input(docs, label, per_doc)}],
+        json_schema=prompts.COMPARE_TOPIC_SCHEMA,
+        max_tokens=1500,
+        num_ctx=TOPIC_NUM_CTX,
+    )
+    return {
+        "topic": label,
+        "cells": payload.get("cells", []),
+        "verdict": payload.get("verdict", ""),
+    }
+
+
+def _prepare(
+    conn: sqlite3.Connection, doc_ids: list[str], topic_keys: list[str] | None
+) -> tuple[list[sqlite3.Row], list[tuple[str, str, str]], dict[str, dict[str, list[Any]]], dict[str, Any]]:
     if len(doc_ids) < 2:
         raise ValueError("Karşılaştırma için en az iki sözleşme seçilmelidir.")
     if len(doc_ids) > 5:
@@ -156,7 +176,7 @@ def compare(
 
     collected = _collect_topic_clauses(conn, doc_ids, topics)
 
-    result: dict[str, Any] = {
+    base: dict[str, Any] = {
         "documents": [
             {
                 "id": doc["id"],
@@ -176,27 +196,105 @@ def compare(
             for key, per_doc in collected.items()
         },
         "topic_labels": {key: label for key, label, _ in topics},
-        "headline": "",
-        "topics": [],
-        "llm_error": None,
     }
+    return docs, topics, collected, base
+
+
+def _headline(topic_labels: list[str]) -> str:
+    shown = ", ".join(topic_labels[:3])
+    return f"{len(topic_labels)} konuda karşılaştırma tamamlandı: {shown}" + (
+        "…" if len(topic_labels) > 3 else "."
+    )
+
+
+def compare(
+    conn: sqlite3.Connection,
+    doc_ids: list[str],
+    *,
+    topic_keys: list[str] | None = None,
+    use_llm: bool = True,
+) -> dict[str, Any]:
+    docs, topics, collected, base = _prepare(conn, doc_ids, topic_keys)
+    result: dict[str, Any] = {**base, "headline": "", "topics": [], "llm_error": None}
 
     if not use_llm:
         return result
 
-    try:
-        payload = llm.complete_json(
-            system=prompts.COMPARE_SYSTEM,
-            messages=[{"role": "user", "content": _build_llm_input(docs, topics, collected)}],
-            json_schema=prompts.COMPARE_SCHEMA,
-            max_tokens=16000,
+    # Konular sırayla, tek tek işlenir (bkz. `_compare_topic`): her konuyu ayrı,
+    # küçük bir JSON çağrısı yapmak — 10 konuyu tek dev çağrıda bir arada
+    # üretmeye zorlamaktan — hem doğru çalışıyor (qwen2.5:7b tek dev çağrıda
+    # bazı bulguları başka dile kaydırıyor ya da konu adı yerine belge id'si
+    # yazıyordu) hem de neredeyse aynı sürede tamamlanıyor. Eşzamanlı (thread
+    # havuzu ile paralel) çalıştırmak ölçüldü: bu makinede tek GPU/birleşik
+    # bellek üzerinde eşzamanlı istekler birbirini yavaşlatıyor ve toplamda
+    # sıralı çalıştırmadan daha uzun sürüyor — bu yüzden bilinçli olarak
+    # sıralı bırakıldı.
+    errors: list[str] = []
+    for key, label, _ in topics:
+        try:
+            topic_result = _compare_topic(docs, key, label, collected[key])
+        except llm.LLMUnavailable as exc:
+            errors.append(str(exc))
+            continue
+        except Exception as exc:
+            logger.exception("Karşılaştırma konusu başarısız oldu: %s", key)
+            errors.append(f"{key}: {exc}")
+            continue
+        if topic_result is not None:
+            result["topics"].append(topic_result)
+
+    if result["topics"]:
+        result["headline"] = _headline([t["topic"] for t in result["topics"]])
+    if errors:
+        result["llm_error"] = (
+            f"{len(errors)} konu analiz edilemedi: {errors[0]}"
+            if not result["topics"]
+            else f"{len(errors)} konu analiz edilemedi (diğerleri gösteriliyor)."
         )
-        result["headline"] = payload.get("headline", "")
-        result["topics"] = payload.get("topics", [])
-    except llm.LLMUnavailable as exc:
-        result["llm_error"] = str(exc)
-    except Exception as exc:
-        logger.exception("Karşılaştırma model katmanı başarısız oldu")
-        result["llm_error"] = f"Model katmanı çalıştırılamadı: {exc}"
 
     return result
+
+
+def compare_stream(
+    conn: sqlite3.Connection,
+    doc_ids: list[str],
+    *,
+    topic_keys: list[str] | None = None,
+    use_llm: bool = True,
+) -> Any:
+    """`compare()` ile aynı işi yapar ama her konu tamamlandıkça olay üretir —
+    kullanıcı 10 konunun tamamı bitene kadar (~2-3 dakika) beklemek yerine ilk
+    sonuçları saniyeler içinde görür. Bkz. `routers/analysis.py`'daki SSE ucu.
+    """
+    docs, topics, collected, base = _prepare(conn, doc_ids, topic_keys)
+    yield {"type": "meta", **base}
+
+    if not use_llm:
+        yield {"type": "done", "completed": 0, "failed": 0}
+        return
+
+    completed: list[str] = []
+    failed = 0
+    for key, label, _ in topics:
+        try:
+            topic_result = _compare_topic(docs, key, label, collected[key])
+        except llm.LLMUnavailable as exc:
+            failed += 1
+            yield {"type": "topic_error", "key": key, "topic": label, "message": str(exc)}
+            continue
+        except Exception as exc:
+            logger.exception("Karşılaştırma konusu başarısız oldu: %s", key)
+            failed += 1
+            yield {"type": "topic_error", "key": key, "topic": label, "message": str(exc)}
+            continue
+        if topic_result is None:
+            continue
+        completed.append(label)
+        yield {"type": "topic", "key": key, **topic_result}
+
+    yield {
+        "type": "done",
+        "completed": len(completed),
+        "failed": failed,
+        "headline": _headline(completed) if completed else "",
+    }

@@ -15,6 +15,14 @@ class Settings:
     # Ollama: yerel, ücretsiz LLM sunucusu — API anahtarı gerekmez.
     ollama_host: str = os.getenv("OLLAMA_HOST", "http://localhost:11434").strip()
     ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2.5:7b").strip()
+    # Varsayılan (4096) büyük sözleşme maddesi listelerini sessizce kırpıyordu;
+    # modelin desteklediği 32768'e kadar çıkabiliyoruz ama KV-cache belleği
+    # context ile orantılı büyüdüğü için makul bir üst sınırda tutuyoruz.
+    ollama_num_ctx: int = int(os.getenv("OLLAMA_NUM_CTX", "12288"))
+    # Analizler art arda çalıştırıldığında modelin bellekten atılıp yeniden
+    # yüklenmesini (ilk çağrıda ~80s soğuk başlatma) önlemek için varsayılan
+    # 5 dakikalık keep_alive yerine daha uzun tutuyoruz.
+    ollama_keep_alive: str = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
     embedding_model: str = os.getenv(
         "EMBEDDING_MODEL",
         "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",

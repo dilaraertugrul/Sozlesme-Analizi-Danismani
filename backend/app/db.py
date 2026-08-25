@@ -8,14 +8,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import threading
 from contextlib import contextmanager
 from typing import Any, Iterator
 
 from .config import settings
 
 DB_PATH = settings.data_dir / "app.db"
-_lock = threading.Lock()
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -96,12 +94,12 @@ def _connect() -> sqlite3.Connection:
 
 @contextmanager
 def get_db() -> Iterator[sqlite3.Connection]:
-    """Her istek için kısa ömürlü bağlantı; yazmalar süreç içi kilitle serileştirilir."""
+    """Her istek için kısa ömürlü bağlantı; eşzamanlı yazmalar SQLite'ın
+    `_connect`'teki `timeout=30` busy-timeout'u ile sıraya konur."""
     conn = _connect()
     try:
-        with _lock:
-            yield conn
-            conn.commit()
+        yield conn
+        conn.commit()
     except Exception:
         conn.rollback()
         raise

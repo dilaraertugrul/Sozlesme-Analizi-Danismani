@@ -222,6 +222,68 @@ export function compareDocuments(
   });
 }
 
+type CompareMeta = Omit<CompareResult, "headline" | "topics" | "llm_error">;
+
+type StreamCompareHandlers = {
+  onMeta?: (meta: CompareMeta) => void;
+  onTopic?: (topic: CompareTopic) => void;
+  onTopicError?: (topic: string, message: string) => void;
+  onDone?: (info: { completed: number; failed: number; headline: string }) => void;
+  onError?: (message: string) => void;
+};
+
+export async function streamCompare(
+  docIds: string[],
+  options: { topics?: string[]; use_llm?: boolean } | undefined,
+  handlers: StreamCompareHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/compare/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      doc_ids: docIds,
+      topics: options?.topics ?? null,
+      use_llm: options?.use_llm ?? true,
+    }),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    throw new ApiError(res.statusText, res.status);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let sepIndex: number;
+    while ((sepIndex = buffer.indexOf("\n\n")) !== -1) {
+      const rawEvent = buffer.slice(0, sepIndex);
+      buffer = buffer.slice(sepIndex + 2);
+      const line = rawEvent.startsWith("data: ") ? rawEvent.slice(6) : rawEvent;
+      if (!line) continue;
+
+      const event = JSON.parse(line) as
+        | ({ type: "meta" } & CompareMeta)
+        | ({ type: "topic" } & CompareTopic)
+        | { type: "topic_error"; topic: string; message: string }
+        | { type: "done"; completed: number; failed: number; headline: string }
+        | { type: "error"; message: string };
+
+      if (event.type === "meta") handlers.onMeta?.(event);
+      else if (event.type === "topic") handlers.onTopic?.(event);
+      else if (event.type === "topic_error") handlers.onTopicError?.(event.topic, event.message);
+      else if (event.type === "done") handlers.onDone?.(event);
+      else if (event.type === "error") handlers.onError?.(event.message);
+    }
+  }
+}
+
 export type SuggestedQuestion = { question: string; category: string };
 
 export function getSuggestedQuestions(id: string): Promise<{ questions: SuggestedQuestion[] }> {

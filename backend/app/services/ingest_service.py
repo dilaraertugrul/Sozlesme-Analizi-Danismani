@@ -6,6 +6,7 @@ import json
 import logging
 import sqlite3
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -59,12 +60,49 @@ def _extract_metadata(text: str) -> dict:
         }
 
 
-def ingest(conn: sqlite3.Connection, path: Path, original_name: str) -> dict:
+@dataclass
+class PreparedDocument:
+    """`prepare()`'ın ağır (LLM/gömme) çıktısı; DB bağlantısı gerektirmez."""
+
+    doc_id: str
+    metadata: dict
+    chunks: list
+    chunk_pages: list[int]
+    vectors: list | None
+    page_count: int
+    char_count: int
+    raw_text: str
+
+
+def prepare(path: Path, original_name: str) -> PreparedDocument:
+    """Ağır iş: metin çıkarımı, maddeleme, künye (LLM) ve gömme.
+
+    DB'ye dokunmaz, böylece bir istek isteği içindeyken thread havuzunda
+    çalıştırılabilir ve asyncio event loop'unu ya da DB bağlantısını
+    dakikalarca meşgul etmez (bkz. `documents.py`'daki upload endpoint'i).
+    """
     document = extractor.extract(path)
     chunks = chunk_document(document.text)
-
     metadata = _extract_metadata(document.text)
-    doc_id = path.stem
+    vectors = embedder.encode([c.text for c in chunks]) if embedder.is_available() else None
+
+    return PreparedDocument(
+        doc_id=path.stem,
+        metadata=metadata,
+        chunks=chunks,
+        chunk_pages=[document.page_of(c.char_start) for c in chunks],
+        vectors=vectors,
+        page_count=document.page_count,
+        char_count=len(document.text),
+        raw_text=document.text,
+    )
+
+
+def persist(conn: sqlite3.Connection, original_name: str, prepared: PreparedDocument) -> dict:
+    """`prepare()` çıktısını veritabanına yazar. Hızlıdır, LLM çağrısı içermez."""
+    doc_id = prepared.doc_id
+    metadata = prepared.metadata
+    chunks = prepared.chunks
     now = datetime.now(timezone.utc).isoformat()
 
     conn.execute(
@@ -80,20 +118,17 @@ def ingest(conn: sqlite3.Connection, path: Path, original_name: str) -> dict:
             json.dumps(metadata.get("parties") or [], ensure_ascii=False),
             metadata.get("effective_date"),
             metadata.get("governing_law"),
-            document.page_count,
-            len(document.text),
+            prepared.page_count,
+            prepared.char_count,
             len(chunks),
             "hazir",
             now,
-            document.text,
+            prepared.raw_text,
         ),
     )
 
-    # Yoğun vektörler (sentence-transformers kuruluysa)
-    vectors = embedder.encode([c.text for c in chunks]) if embedder.is_available() else None
-
     for index, chunk in enumerate(chunks):
-        page = document.page_of(chunk.char_start)
+        page = prepared.chunk_pages[index]
         conn.execute(
             """INSERT INTO chunks (id, doc_id, ordinal, article_no, heading, text,
                                    page_start, page_end, embedding)
@@ -107,7 +142,7 @@ def ingest(conn: sqlite3.Connection, path: Path, original_name: str) -> dict:
                 chunk.text,
                 page,
                 page,
-                embedder.to_blob(vectors[index]) if vectors is not None else None,
+                embedder.to_blob(prepared.vectors[index]) if prepared.vectors is not None else None,
             ),
         )
 
@@ -130,8 +165,8 @@ def ingest(conn: sqlite3.Connection, path: Path, original_name: str) -> dict:
         "title": metadata.get("title") or Path(original_name).stem,
         "doc_type": metadata.get("doc_type"),
         "clause_count": len(chunks),
-        "page_count": document.page_count,
-        "char_count": len(document.text),
+        "page_count": prepared.page_count,
+        "char_count": prepared.char_count,
         "summary": metadata.get("summary", ""),
         "key_obligations": metadata.get("key_obligations", []),
         "parties": metadata.get("parties", []),

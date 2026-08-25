@@ -91,7 +91,7 @@ Ağırlık ölçütün: bulgunun taraf açısından yaratabileceği parasal/oper
 gerçekleşme olasılığı. Standart ve piyasada olağan olan hükümleri risk olarak işaretleme.
 
 Öneri yazarken müzakere edilebilir somut alternatifler ver; "gözden geçirilmelidir" gibi \
-içi boş ifadelerden kaçın. {DISCLAIMER}
+içi boş ifadelerden kaçın. Kısa ve öz yaz; her alanı gerekli olan en az cümleyle doldur. {DISCLAIMER}
 
 {TURKISH_ONLY}"""
 
@@ -125,25 +125,28 @@ RISK_SCHEMA = {
                     "title": {"type": "string", "description": "Riski tek cümlede tanımlayan başlık"},
                     "clause_ref": {"type": ["string", "null"], "description": "Madde numarası veya başlığı"},
                     "excerpt": {"type": ["string", "null"], "description": "Riski doğuran metinden birebir kısa alıntı"},
-                    "rationale": {"type": "string", "description": "Bu neden risk oluşturuyor — somut sonuçla açıkla"},
-                    "recommendation": {"type": "string", "description": "Ne yapılmalı — uygulanabilir tek eylem"},
+                    "rationale": {"type": "string", "description": "Bu neden risk oluşturuyor — 1-2 cümlede somut sonuçla açıkla"},
+                    "recommendation": {"type": "string", "description": "Ne yapılmalı — uygulanabilir tek eylem, tek cümle"},
                     "options": {
                         "type": "array",
                         "items": {
                             "type": "object",
                             "properties": {
                                 "label": {"type": "string", "description": "Seçeneğin kısa adı"},
-                                "detail": {"type": "string", "description": "Müzakerede önerilecek somut hüküm değişikliği"},
+                                "detail": {"type": "string", "description": "Müzakerede önerilecek somut hüküm değişikliği, tek cümle"},
                                 "impact": {"type": "string", "enum": ["koruyucu", "dengeli", "agresif"]},
                             },
                             "required": ["label", "detail", "impact"],
                             "additionalProperties": False,
                         },
+                        "maxItems": 2,
+                        "description": "En fazla 2 somut müzakere seçeneği",
                     },
                 },
                 "required": ["category", "severity", "title", "rationale", "recommendation", "options"],
                 "additionalProperties": False,
             },
+            "maxItems": 12,
         },
     },
     "required": ["overall_assessment", "position", "findings"],
@@ -186,51 +189,46 @@ SUGGEST_SCHEMA = {
 }
 
 
-COMPARE_SYSTEM = f"""Sen birden fazla sözleşmeyi yan yana değerlendiren bir hukuk analistisin. \
-Sana her sözleşmeden aynı konuya (ör. fesih, sorumluluk, ödeme) ilişkin maddeler verilir.
+COMPARE_TOPIC_SYSTEM = f"""Sen birden fazla sözleşmeyi yan yana değerlendiren bir hukuk analistisin. \
+Sana TEK bir konuya (ör. fesih, sorumluluk, ödeme) ilişkin, her sözleşmeden ilgili maddeler verilir.
 
-Her konu başlığı için sözleşmelerin o konudaki düzenlemesini kısaca özetle ve aralarındaki \
-farkı belirt. Hangi sözleşmenin ilgili konuda daha koruyucu olduğunu gerekçesiyle söyle. \
-Bir sözleşmede o konu hiç düzenlenmemişse bunu ayrıca not et — çoğu zaman en önemli fark budur.
+Sözleşmelerin bu konudaki düzenlemesini kısaca özetle ve aralarındaki farkı belirt. Hangi \
+sözleşmenin bu konuda daha koruyucu olduğunu gerekçesiyle söyle. Bir sözleşmede bu konu hiç \
+düzenlenmemişse bunu ayrıca not et — çoğu zaman en önemli fark budur.
 
-Değerlendirmeni yalnızca verilen maddelere dayandır. {DISCLAIMER}
+`verdict` metninde sözleşmelere başlıklarıyla atıfta bulun (ör. "Kira Sözleşmesi"); ham \
+doc_id değerini asla metne yazma — doc_id yalnızca `cells` içindeki `doc_id` alanına aittir.
+
+Değerlendirmeni yalnızca verilen maddelere dayandır. Kısa ve öz yaz; her alanı gerekli olan \
+en az cümleyle doldur. {DISCLAIMER}
 
 {TURKISH_ONLY}"""
 
-COMPARE_SCHEMA = {
+COMPARE_TOPIC_SCHEMA = {
     "type": "object",
     "properties": {
-        "headline": {"type": "string", "description": "Karşılaştırmanın ana bulgusunu özetleyen 1-2 cümle"},
-        "topics": {
+        "cells": {
             "type": "array",
             "items": {
                 "type": "object",
                 "properties": {
-                    "topic": {"type": "string", "description": "Karşılaştırılan konu başlığı"},
-                    "cells": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "doc_id": {"type": "string"},
-                                "clause_ref": {"type": ["string", "null"]},
-                                "summary": {"type": "string", "description": "Bu sözleşmenin ilgili düzenlemesi, tek-iki cümle"},
-                                "stance": {
-                                    "type": "string",
-                                    "enum": ["koruyucu", "dengeli", "riskli", "duzenlenmemis"],
-                                },
-                            },
-                            "required": ["doc_id", "summary", "stance"],
-                            "additionalProperties": False,
-                        },
+                    "doc_id": {"type": "string"},
+                    "clause_ref": {"type": ["string", "null"]},
+                    "summary": {"type": "string", "description": "Bu sözleşmenin ilgili düzenlemesi, tek cümle"},
+                    "stance": {
+                        "type": "string",
+                        "enum": ["koruyucu", "dengeli", "riskli", "duzenlenmemis"],
                     },
-                    "verdict": {"type": "string", "description": "Konu bazında hangi sözleşmenin daha avantajlı olduğu ve nedeni"},
                 },
-                "required": ["topic", "cells", "verdict"],
+                "required": ["doc_id", "summary", "stance"],
                 "additionalProperties": False,
             },
         },
+        "verdict": {
+            "type": "string",
+            "description": "Bu konuda hangi sözleşmenin daha avantajlı olduğu ve nedeni, tek cümle",
+        },
     },
-    "required": ["headline", "topics"],
+    "required": ["cells", "verdict"],
     "additionalProperties": False,
 }

@@ -56,15 +56,28 @@ def complete(
     messages: list[dict[str, Any]],
     max_tokens: int = 4000,
     json_schema: dict[str, Any] | None = None,
+    num_ctx: int | None = None,
 ) -> str:
-    """Tek seferlik yanıt. `json_schema` verilirse çıktı şemaya zorlanır."""
+    """Tek seferlik yanıt. `json_schema` verilirse çıktı şemaya zorlanır.
+
+    `num_ctx`: girdi küçükse (ör. tek-konu karşılaştırma çağrıları) varsayılan
+    genel context'ten daha küçüğü yeterli olur — bu hem bellek ayırımını
+    küçültür hem de eşzamanlı çağrıların birbirini boğmasını azaltır.
+    """
     client = get_client()
     try:
         response = client.chat(
             model=settings.ollama_model,
             messages=_messages(system, messages),
             format=json_schema if json_schema is not None else None,
-            options={"num_predict": max_tokens},
+            # Yapılandırılmış (şemalı) çıktılarda düşük sıcaklık, qwen2.5:7b'nin
+            # uzun üretimlerde ara sıra Çince'ye kaymasını azaltıyor (gözlemlendi).
+            options={
+                "num_predict": max_tokens,
+                "num_ctx": num_ctx if num_ctx is not None else settings.ollama_num_ctx,
+                "temperature": 0.3 if json_schema is not None else 0.7,
+            },
+            keep_alive=settings.ollama_keep_alive,
         )
     except (ollama.ResponseError, ConnectionError, OSError) as exc:
         raise _friendly_error(exc) from exc
@@ -78,8 +91,11 @@ def complete_json(
     messages: list[dict[str, Any]],
     json_schema: dict[str, Any],
     max_tokens: int = 4000,
+    num_ctx: int | None = None,
 ) -> dict[str, Any]:
-    raw = complete(system=system, messages=messages, max_tokens=max_tokens, json_schema=json_schema)
+    raw = complete(
+        system=system, messages=messages, max_tokens=max_tokens, json_schema=json_schema, num_ctx=num_ctx
+    )
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -102,7 +118,8 @@ def stream_text(
         stream = client.chat(
             model=settings.ollama_model,
             messages=_messages(system, messages),
-            options={"num_predict": max_tokens},
+            options={"num_predict": max_tokens, "num_ctx": settings.ollama_num_ctx},
+            keep_alive=settings.ollama_keep_alive,
             stream=True,
         )
         for chunk in stream:

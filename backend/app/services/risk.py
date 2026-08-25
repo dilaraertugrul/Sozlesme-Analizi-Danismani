@@ -191,7 +191,10 @@ def run_llm_layer(
         system=prompts.RISK_SYSTEM,
         messages=[{"role": "user", "content": user_content}],
         json_schema=prompts.RISK_SCHEMA,
-        max_tokens=16000,
+        # Şema artık findings<=12 ve alanlar tek cümleyle sınırlı (bkz. prompts.py);
+        # 16000 gereğinden çok büyük bir tavandı ve model saparsa gereksiz yere
+        # uzun sürmesine izin veriyordu.
+        max_tokens=6000,
     )
 
     findings = [

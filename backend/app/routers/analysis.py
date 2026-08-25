@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..db import get_db
@@ -73,6 +74,29 @@ def compare_documents(body: CompareRequest):
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/compare/stream")
+def compare_documents_stream(body: CompareRequest):
+    """Sunucu-gönderimli olay akışı: önce belge/risk-matrisi bilgisi, ardından
+    her konu tamamlandıkça ayrı bir olay — tam karşılaştırma birkaç dakika
+    sürebildiği için kullanıcı ilk sonuçları saniyeler içinde görür."""
+
+    def event_source():
+        with get_db() as conn:
+            try:
+                for event in compare_service.compare_stream(
+                    conn, body.doc_ids, topic_keys=body.topics, use_llm=body.use_llm
+                ):
+                    yield qa.sse(event)
+            except ValueError as exc:
+                yield qa.sse({"type": "error", "message": str(exc)})
+
+    return StreamingResponse(
+        event_source(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/compare/topics")

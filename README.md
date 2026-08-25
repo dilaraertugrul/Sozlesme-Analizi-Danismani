@@ -12,6 +12,15 @@ bilgisayarınızda kalır.
 > **Not:** Bu araç sözleşme inceleme sürecini desteklemek için geliştirilmiştir.
 > Ürettiği analiz ve yanıtlar profesyonel hukuki danışmanlığın yerini tutmaz.
 
+## Ekran görüntüleri
+
+| | |
+|---|---|
+| **Sözleşme yükleme ve liste** | **Risk analizi** |
+| ![Ana sayfa](docs/screenshots/ana-sayfa.jpg) | ![Risk analizi](docs/screenshots/risk-analizi.jpg) |
+| **Kaynaklı sohbet** | **Karşılaştırma** |
+| ![Sohbet](docs/screenshots/sohbet.jpg) | ![Karşılaştırma](docs/screenshots/karsilastirma.jpg) |
+
 ## Özellikler
 
 - **Sözleşme yükleme** — PDF, DOCX, TXT ve Markdown (.md) dosyaları desteklenir,
@@ -27,6 +36,9 @@ bilgisayarınızda kalır.
   dayanarak üretilir ve hangi maddeye dayandığı gösterilir.
 - **Karşılaştırma** — 2-5 sözleşmeyi seçip ortak konularda (fesih, sorumluluk,
   ödeme vb.) yan yana karşılaştırabilirsiniz; bu da aynı RAG katmanını kullanır.
+  Deterministik risk matrisi anında, konu bazlı model yorumu ise her konu
+  tamamlandıkça tek tek akar (SSE) — tam karşılaştırma bitene kadar beklemek
+  yerine ilk sonuçlar saniyeler içinde görünür.
 - **Nasıl Çalışır sayfası** — uygulama içi kullanım kılavuzu ve SSS.
 
 ## RAG mimarisi
